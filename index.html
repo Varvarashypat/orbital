@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ORBITAL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  width: 100%;
+  height: 100%;
+  /* Use dynamic viewport height where supported — accounts for mobile browser chrome */
+  height: 100dvh;
+  overflow: hidden;
+  background: #000;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  color: #fff;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+  /* iOS safe area padding so notch/home-indicator don't cover content */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+#game-wrapper {
+  position: relative;
+  /* Fit inside the safe viewport while keeping 9:16 — chooses the smaller of two constraints */
+  width: min(100vw, calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * 9 / 16));
+  height: min(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom), calc(100vw * 16 / 9));
+  max-width: 450px;
+  margin: 0 auto;
+  border: 4px solid #2a3550;
+  box-shadow:
+    0 0 0 2px #000,
+    0 0 0 6px #1a2540,
+    0 0 30px rgba(80, 120, 255, 0.25),
+    inset 0 0 80px rgba(0, 0, 0, 0.6);
+  background: #0b1530;
+  overflow: hidden;
+}
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #0b1530;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+#scanlines {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0.28) 0px,
+    rgba(0,0,0,0.28) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  z-index: 5;
+}
+#crt-glow {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.45) 100%);
+  z-index: 4;
+}
+#ui-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+#top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: 12px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(11,21,48,0.95) 0%, rgba(11,21,48,0) 100%);
+}
+#title-bar {
+  font-size: 14px;
+  color: #ffd633;
+  text-shadow:
+    2px 2px 0 #aa3300,
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000;
+  letter-spacing: 2px;
+}
+#level-info {
+  margin-top: 8px;
+  font-size: 7px;
+  color: #5cd0ff;
+  letter-spacing: 1px;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+#attempts {
+  position: absolute;
+  top: 14px; left: 10px;
+  font-size: 7px;
+  color: #ff6b6b;
+  letter-spacing: 1px;
+  z-index: 2;
+  text-shadow: 1px 1px 0 #000;
+}
+#controls {
+  position: absolute;
+  bottom: 14px;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: all;
+  padding: 0 10px;
+}
+.btn {
+  background: #2a3550;
+  border: none;
+  color: #fff;
+  width: 56px;
+  height: 56px;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow:
+    inset 3px 3px 0 #4a5a80,
+    inset -3px -3px 0 #1a2340,
+    0 0 0 2px #000;
+  text-shadow: 1px 1px 0 #000;
+  transition: transform 0.05s;
+}
+.btn:active {
+  transform: translate(1px, 1px);
+  box-shadow:
+    inset -3px -3px 0 #4a5a80,
+    inset 3px 3px 0 #1a2340,
+    0 0 0 2px #000;
+}
+.btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+#btn-next:not(:disabled) {
+  background: #c89000;
+  color: #fff;
+  box-shadow:
+    inset 3px 3px 0 #ffd633,
+    inset -3px -3px 0 #804000,
+    0 0 0 2px #000,
+    0 0 14px rgba(255, 214, 51, 0.6);
+  animation: nextPulse 0.9s steps(2) infinite;
+}
+@keyframes nextPulse {
+  0%, 50%  {
+    box-shadow:
+      inset 3px 3px 0 #ffd633,
+      inset -3px -3px 0 #804000,
+      0 0 0 2px #000,
+      0 0 12px rgba(255, 214, 51, 0.4);
+  }
+  51%, 100% {
+    box-shadow:
+      inset 3px 3px 0 #ffe566,
+      inset -3px -3px 0 #a05000,
+      0 0 0 2px #000,
+      0 0 22px rgba(255, 214, 51, 0.85);
+  }
+}
+#message {
+  position: absolute;
+  top: 42%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 16px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: 2px;
+  text-shadow:
+    3px 3px 0 #000,
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000;
+}
+#hint {
+  position: absolute;
+  bottom: 86px;
+  left: 0; right: 0;
+  text-align: center;
+  font-size: 7px;
+  color: #6680b3;
+  letter-spacing: 1px;
+  pointer-events: none;
+  animation: blink 1.4s steps(2) infinite;
+  text-shadow: 1px 1px 0 #000;
+}
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+#start-screen, #complete-screen, #level-select {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(11,21,48,0.97);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  z-index: 10;
+  padding: 20px;
+}
+#start-screen.hidden { display: none; }
+#complete-screen { display: none; }
+#complete-screen.show { display: flex; }
+#level-select { display: none; }
+#level-select.show { display: flex; }
+#level-select h2 {
+  font-size: 18px;
+  margin-bottom: 4px;
+  letter-spacing: 3px;
+  color: #ffd633;
+  text-shadow: 3px 3px 0 #aa3300, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+}
+#level-select .subtitle {
+  font-size: 8px;
+  color: #5cd0ff;
+  margin-bottom: 24px;
+  letter-spacing: 2px;
+  text-shadow: 1px 1px 0 #000;
+}
+#level-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 20px;
+}
+.lvl-cell {
+  aspect-ratio: 1;
+  background: #2a3550;
+  border: none;
+  color: #fff;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 4px;
+  box-shadow:
+    inset 3px 3px 0 #4a5a80,
+    inset -3px -3px 0 #1a2340,
+    0 0 0 2px #000;
+  text-shadow: 1px 1px 0 #000;
+  transition: transform 0.05s;
+}
+.lvl-cell:active:not(.locked) {
+  transform: translate(1px, 1px);
+  box-shadow:
+    inset -3px -3px 0 #4a5a80,
+    inset 3px 3px 0 #1a2340,
+    0 0 0 2px #000;
+}
+.lvl-cell .num {
+  font-size: 16px;
+  color: #fff;
+}
+.lvl-cell .name {
+  font-size: 5px;
+  color: #5cd0ff;
+  margin-top: 4px;
+  text-align: center;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+}
+.lvl-cell.completed {
+  background: #1a4020;
+  box-shadow:
+    inset 3px 3px 0 #2a8030,
+    inset -3px -3px 0 #0c2010,
+    0 0 0 2px #000;
+}
+.lvl-cell.completed .num { color: #5cff80; }
+.lvl-cell.completed .name { color: #88ff88; }
+.lvl-cell .check {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 9px;
+  color: #5cff80;
+}
+.lvl-cell.locked {
+  background: #1a1f30;
+  cursor: default;
+  box-shadow:
+    inset 3px 3px 0 #252a3a,
+    inset -3px -3px 0 #0a0f1a,
+    0 0 0 2px #000;
+}
+.lvl-cell.locked .num,
+.lvl-cell.locked .name { color: #404858; }
+.lvl-cell.current {
+  outline: 2px dashed #ffd633;
+  outline-offset: 2px;
+}
+.menu-btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.small-arcade-btn {
+  background: #2a3550;
+  border: none;
+  color: #fff;
+  padding: 10px 18px;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  box-shadow:
+    inset 3px 3px 0 #4a5a80,
+    inset -3px -3px 0 #1a2340,
+    0 0 0 2px #000;
+  text-shadow: 1px 1px 0 #000;
+  transition: transform 0.05s;
+}
+.small-arcade-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow:
+    inset -3px -3px 0 #4a5a80,
+    inset 3px 3px 0 #1a2340,
+    0 0 0 2px #000;
+}
+.small-arcade-btn.danger {
+  background: #802020;
+  box-shadow:
+    inset 3px 3px 0 #c84040,
+    inset -3px -3px 0 #400808,
+    0 0 0 2px #000;
+}
+#start-screen h2 {
+  font-size: 28px;
+  margin-bottom: 14px;
+  letter-spacing: 3px;
+  color: #ffd633;
+  text-shadow:
+    4px 4px 0 #aa3300,
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    2px 2px 0 #000;
+  text-align: center;
+}
+#start-screen .subtitle {
+  font-size: 8px;
+  color: #5cd0ff;
+  margin-bottom: 60px;
+  letter-spacing: 2px;
+  text-shadow: 1px 1px 0 #000;
+}
+.arcade-btn {
+  background: #c80000;
+  border: none;
+  color: #fff;
+  padding: 18px 36px;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 14px;
+  letter-spacing: 3px;
+  cursor: pointer;
+  position: relative;
+  box-shadow:
+    inset 4px 4px 0 #ff4040,
+    inset -4px -4px 0 #800000,
+    0 0 0 3px #000,
+    0 6px 0 #000,
+    0 0 24px rgba(255, 80, 80, 0.4);
+  text-shadow: 2px 2px 0 #000;
+  transition: transform 0.05s;
+  margin-bottom: 10px;
+}
+.arcade-btn:active {
+  transform: translate(2px, 4px);
+  box-shadow:
+    inset -4px -4px 0 #ff4040,
+    inset 4px 4px 0 #800000,
+    0 0 0 3px #000,
+    0 2px 0 #000;
+}
+#insert-coin {
+  margin-top: 22px;
+  font-size: 8px;
+  color: #5cd0ff;
+  letter-spacing: 2px;
+  animation: blink 1s steps(2) infinite;
+  text-shadow: 1px 1px 0 #000;
+}
+#complete-screen h2 {
+  font-size: 18px;
+  margin-bottom: 14px;
+  letter-spacing: 2px;
+  color: #ffd633;
+  text-shadow:
+    4px 4px 0 #aa3300,
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000,
+    2px 2px 0 #000;
+  text-align: center;
+  line-height: 1.5;
+}
+#complete-screen p {
+  font-size: 8px;
+  color: #5cff80;
+  margin-bottom: 36px;
+  letter-spacing: 2px;
+  text-align: center;
+  text-shadow: 1px 1px 0 #000;
+}
+</style>
+</head>
+<body>
+<div id="game-wrapper">
+  <canvas id="c" width="450" height="800"></canvas>
+  <div id="crt-glow"></div>
+  <div id="scanlines"></div>
+  <div id="ui-overlay">
+    <div id="attempts"></div>
+    <div id="top-bar">
+      <div id="title-bar">ORBITAL</div>
+      <div id="level-info"></div>
+    </div>
+    <div id="hint">DRAG SHIP TO LAUNCH</div>
+    <div id="controls">
+      <button id="btn-menu" class="btn" title="Menu">☰</button>
+      <button id="btn-restart" class="btn" title="Restart">↺</button>
+      <button id="btn-next" class="btn" title="Next" disabled>→</button>
+    </div>
+    <div id="message"></div>
+  </div>
+  <div id="start-screen">
+    <h2>ORBITAL</h2>
+    <div class="subtitle">GRAVITATIONAL PUZZLE</div>
+    <button id="start-btn" class="arcade-btn">PRESS START</button>
+    <button id="stage-select-btn" class="small-arcade-btn" style="margin-top:12px">STAGE SELECT</button>
+    <div id="insert-coin">▶ INSERT COIN ◀</div>
+  </div>
+  <div id="level-select">
+    <h2>STAGE SELECT</h2>
+    <div class="subtitle">CHOOSE YOUR MISSION</div>
+    <div id="level-grid"></div>
+    <div class="menu-btn-row">
+      <button id="ls-close-btn" class="small-arcade-btn">▶ RESUME</button>
+      <button id="ls-reset-btn" class="small-arcade-btn danger">RESET</button>
+    </div>
+  </div>
+  <div id="complete-screen">
+    <h2>ALL ORBITS<br>ACHIEVED</h2>
+    <p>10 / 10 STAGES CLEAR</p>
+    <button id="start-btn-replay" class="arcade-btn">PLAY AGAIN</button>
+    <button id="cs-menu-btn" class="small-arcade-btn" style="margin-top:12px">STAGE SELECT</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const W = 450, H = 800;
+const G = 80;
+const FIXED_DT = 1/60;
+const MAX_FLIGHT_TIME = 15;
+const PREDICTION_TIME = 2.0;
+const PREDICTION_STEPS = 140;
+const TRAIL_MAX = 120;
+const MAX_PULL = 140;
+const LAUNCH_SPEED_MULT = 2.2;
+const TARGET_RADIUS = 26;
+const PX = 3;
+
+// Retro NES-style palette per planet: [highlight, mid, shadow, crater]
+const PLANET_PALETTES = [
+  ['#7ee8ff', '#2aa6c9', '#0d4d6b', '#062a3d'],  // cyan
+  ['#e57bff', '#9b3ccc', '#4a1480', '#260742'],  // purple
+  ['#ffbf3c', '#e07020', '#8a3000', '#451600'],  // orange
+  ['#ff7bb3', '#c93074', '#7a0c40', '#3d0420'],  // pink
+  ['#a8ff5a', '#4ec22a', '#1d6b0c', '#0d3505'],  // green
+];
+
+const levels = [
+  {
+    name: 'STRAIGHT SHOT',
+    start: {x:225,y:680}, target: {x:225,y:140},
+    planets: [{x:120,y:420,mass:1500,radius:25}]
+  },
+  {
+    name: 'EASY CURVE',
+    start: {x:225,y:680}, target: {x:225,y:140},
+    planets: [{x:175,y:420,mass:2000,radius:30}]
+  },
+  {
+    name: 'GRAVITY ASSIST',
+    start: {x:140,y:660}, target: {x:360,y:160},
+    planets: [{x:240,y:420,mass:4500,radius:45}]
+  },
+  {
+    name: 'CORRIDOR',
+    start: {x:225,y:680}, target: {x:225,y:140},
+    planets: [
+      {x:140,y:420,mass:2500,radius:32},
+      {x:310,y:420,mass:2500,radius:32}
+    ]
+  },
+  {
+    name: 'SLINGSHOT',
+    start: {x:140,y:650}, target: {x:140,y:180},
+    planets: [{x:300,y:420,mass:4500,radius:42}]
+  },
+  {
+    name: 'SLALOM',
+    start: {x:150,y:650}, target: {x:360,y:120},
+    planets: [
+      {x:300,y:570,mass:2000,radius:28},
+      {x:140,y:400,mass:2200,radius:30},
+      {x:320,y:230,mass:1800,radius:26}
+    ]
+  },
+  {
+    name: 'BINARY SYSTEM',
+    start: {x:225,y:700}, target: {x:225,y:120},
+    planets: [
+      {x:175,y:420,mass:3500,radius:38},
+      {x:285,y:480,mass:3500,radius:38}
+    ]
+  },
+  {
+    name: 'LABYRINTH',
+    start: {x:220,y:660}, target: {x:360,y:130},
+    planets: [
+      {x:160,y:600,mass:2000,radius:28},
+      {x:300,y:470,mass:2500,radius:32},
+      {x:140,y:330,mass:2200,radius:30},
+      {x:290,y:180,mass:1800,radius:25}
+    ]
+  },
+  {
+    name: 'NEEDLE EYE',
+    start: {x:225,y:700}, target: {x:225,y:130},
+    planets: [
+      {x:140,y:420,mass:3000,radius:35},
+      {x:300,y:480,mass:3000,radius:35},
+      {x:225,y:340,mass:2000,radius:24}
+    ]
+  },
+  {
+    name: 'CHAOS',
+    start: {x:150,y:660}, target: {x:360,y:130},
+    planets: [
+      {x:180,y:630,mass:2000,radius:28},
+      {x:320,y:500,mass:3000,radius:35},
+      {x:140,y:380,mass:2500,radius:30},
+      {x:330,y:280,mass:2200,radius:28},
+      {x:170,y:170,mass:1800,radius:25}
+    ]
+  }
+];
+
+let state = 'aiming';
+let currentLevel = 0;
+let attemptCount = 0;
+let ship = {x:0,y:0,vx:0,vy:0,angle:0};
+let trail = [];
+let flightTime = 0;
+let particles = [];
+let stars = [];
+let shakeTime = 0;
+let shakeIntensity = 0;
+let portalPulse = 0;
+let winAnimTime = 0;
+let dragging = false;
+let dragStart = {x:0,y:0};
+let dragEnd = {x:0,y:0};
+let completed = loadProgress();
+let SHIP_SPRITE = null;
+let PORTAL_SPRITE = null;
+let STAR_FIELD = null;
+let PORTAL_STATIC = null;
+// pre-computed alpha-quantized color strings
+const TRAIL_COL_BLUE = [];
+const TRAIL_COL_WHITE = [];
+for (let i = 0; i <= 10; i++) {
+  TRAIL_COL_BLUE.push(`rgba(92,208,255,${(i/10).toFixed(2)})`);
+  TRAIL_COL_WHITE.push(`rgba(255,255,255,${(i/10).toFixed(2)})`);
+}
+
+function loadProgress() {
+  try {
+    const d = JSON.parse(localStorage.getItem('orbital_progress'));
+    if (d && Array.isArray(d)) return new Set(d);
+  } catch(e) {}
+  return new Set();
+}
+function saveProgress() {
+  try { localStorage.setItem('orbital_progress', JSON.stringify([...completed])); } catch(e) {}
+}
+
+// Seeded pseudo-random for deterministic planet sprites
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function createPlanetSprite(radius, palette, seed) {
+  const rand = mulberry32(seed);
+  const px = 3;
+  const grid = Math.ceil((radius * 2) / px) + 2;
+  const off = document.createElement('canvas');
+  off.width = grid * px;
+  off.height = grid * px;
+  const c = off.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  const cx = grid / 2 - 0.5;
+  const cy = grid / 2 - 0.5;
+  const r = grid / 2 - 1;
+  // light from top-left
+  for (let gy = 0; gy < grid; gy++) {
+    for (let gx = 0; gx < grid; gx++) {
+      const dx = gx - cx;
+      const dy = gy - cy;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > r) continue;
+      const nx = dx / r, ny = dy / r;
+      const lit = -nx * 0.7 + -ny * 0.7;
+      const noise = (rand() - 0.5) * 0.25;
+      const shade = lit * 0.5 + 0.5 + noise;
+      let color;
+      if (shade > 0.78) color = palette[0];
+      else if (shade > 0.45) color = palette[1];
+      else color = palette[2];
+      // craters
+      if (rand() < 0.06 && dist < r - 0.5) color = palette[3];
+      c.fillStyle = color;
+      c.fillRect(gx * px, gy * px, px, px);
+    }
+  }
+  // outline
+  c.fillStyle = '#000';
+  for (let gy = 0; gy < grid; gy++) {
+    for (let gx = 0; gx < grid; gx++) {
+      const dx = gx - cx, dy = gy - cy;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > r && dist <= r + 1) {
+        c.fillRect(gx * px, gy * px, px, px);
+      }
+    }
+  }
+  return off;
+}
+
+// Ship sprite: hardcoded pixel layout
+// Colors: . = transparent, W = white, G = light gray, K = dark gray, C = cyan window, R = red engine, F = flame yellow, O = outline black
+function createShipSprite() {
+  const layout = [
+    '......O......',
+    '.....OWO.....',
+    '.....OWO.....',
+    '....OWWWO....',
+    '....OWCWO....',
+    '...OWCCCWO...',
+    '...OWCCCWO...',
+    '..OWWGGGWWO..',
+    '..OWGRRRGWO..',
+    '.OGGRRRRR GGO',
+    'OGGORRRRROGGO',
+    'OG.OR.R.RO.GO',
+    '..O.F.F.F.O..',
+  ];
+  const colors = {
+    'O': '#000000',
+    'W': '#ffffff',
+    'G': '#a8b8d0',
+    'K': '#404858',
+    'C': '#5cd0ff',
+    'R': '#e02020',
+    'F': '#ffd633',
+    ' ': '#a8b8d0'
+  };
+  // Clean layout (replace spaces)
+  const clean = layout.map(r => r.replace(/ /g, 'G'));
+  const w = clean[0].length, h = clean.length;
+  const px = 3;
+  const off = document.createElement('canvas');
+  off.width = w * px;
+  off.height = h * px;
+  const c = off.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = clean[y][x];
+      if (ch === '.') continue;
+      c.fillStyle = colors[ch] || '#fff';
+      c.fillRect(x * px, y * px, px, px);
+    }
+  }
+  return off;
+}
+
+function createPortalStatic() {
+  const size = 80;
+  const off = document.createElement('canvas');
+  off.width = size;
+  off.height = size;
+  const c = off.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  const cx = size / 2;
+  const cy = size / 2;
+  const snap = v => Math.round(v / PX) * PX;
+  const drawRing = (radius, color) => {
+    const steps = Math.max(16, Math.floor(radius * 1.4));
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      const x = snap(cx + Math.cos(a) * radius);
+      const y = snap(cy + Math.sin(a) * radius);
+      c.fillStyle = color;
+      c.fillRect(x, y, PX, PX);
+    }
+  };
+  drawRing(28, '#000');
+  drawRing(26, '#000');
+  drawRing(24, '#ff5500');
+  drawRing(22, '#ffaa00');
+  drawRing(20, '#ffd633');
+  drawRing(15, '#000');
+  return off;
+}
+
+function initStars() {
+  stars = [];
+  for (let i = 0; i < 100; i++) {
+    stars.push({
+      x: Math.floor(Math.random() * W / PX) * PX,
+      y: Math.floor(Math.random() * H / PX) * PX,
+      type: Math.random() < 0.18 ? 'sparkle' : 'dot',
+      bright: Math.random() < 0.5 ? 1 : 0.6
+    });
+  }
+  // Bake to a single offscreen canvas — drawn as one drawImage per frame
+  const off = document.createElement('canvas');
+  off.width = W;
+  off.height = H;
+  const c = off.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  for (const s of stars) {
+    if (s.type === 'dot') {
+      c.fillStyle = s.bright > 0.8 ? '#ffffff' : '#a8b8d0';
+      c.fillRect(s.x, s.y, PX, PX);
+    } else {
+      c.fillStyle = '#ffffff';
+      c.fillRect(s.x, s.y, PX, PX);
+      c.fillStyle = s.bright > 0.8 ? '#a0c8ff' : '#6080b0';
+      c.fillRect(s.x - PX, s.y, PX, PX);
+      c.fillRect(s.x + PX, s.y, PX, PX);
+      c.fillRect(s.x, s.y - PX, PX, PX);
+      c.fillRect(s.x, s.y + PX, PX, PX);
+    }
+  }
+  STAR_FIELD = off;
+}
+
+function initLevel(idx) {
+  currentLevel = idx;
+  const lv = levels[idx];
+  ship.x = lv.start.x;
+  ship.y = lv.start.y;
+  ship.vx = 0;
+  ship.vy = 0;
+  ship.angle = -Math.PI / 2;
+  trail = [];
+  flightTime = 0;
+  particles = [];
+  shakeTime = 0;
+  winAnimTime = 0;
+  state = 'aiming';
+  dragging = false;
+  attemptCount = 0;
+  // Generate planet sprites for this level
+  for (let i = 0; i < lv.planets.length; i++) {
+    const p = lv.planets[i];
+    const palette = PLANET_PALETTES[i % PLANET_PALETTES.length];
+    p.sprite = createPlanetSprite(p.radius, palette, idx * 100 + i * 7 + 13);
+  }
+  updateUI();
+}
+
+function restartLevel() {
+  const lv = levels[currentLevel];
+  ship.x = lv.start.x;
+  ship.y = lv.start.y;
+  ship.vx = 0;
+  ship.vy = 0;
+  ship.angle = -Math.PI / 2;
+  trail = [];
+  flightTime = 0;
+  particles = [];
+  shakeTime = 0;
+  winAnimTime = 0;
+  state = 'aiming';
+  dragging = false;
+  attemptCount++;
+  hideMessage();
+  updateUI();
+}
+
+function updateUI() {
+  document.getElementById('level-info').textContent =
+    `STAGE ${String(currentLevel + 1).padStart(2,'0')} - ${levels[currentLevel].name}`;
+  document.getElementById('attempts').textContent = `TRY ${String(attemptCount).padStart(2,'0')}`;
+  document.getElementById('btn-next').disabled = state !== 'won';
+  document.getElementById('hint').style.opacity = state === 'aiming' && attemptCount === 0 ? '1' : '0';
+}
+
+function showMessage(text, color) {
+  const el = document.getElementById('message');
+  el.textContent = text;
+  el.style.color = color || '#fff';
+  el.style.opacity = '1';
+}
+function hideMessage() {
+  document.getElementById('message').style.opacity = '0';
+}
+
+function computeGravity(px, py, planets) {
+  let ax = 0, ay = 0;
+  for (const p of planets) {
+    const dx = p.x - px;
+    const dy = p.y - py;
+    const distSq = dx * dx + dy * dy;
+    const dist = Math.sqrt(distSq);
+    if (dist < 1) continue;
+    const force = G * p.mass / distSq;
+    ax += (dx / dist) * force;
+    ay += (dy / dist) * force;
+  }
+  return {ax, ay};
+}
+
+function simulateStep(sx, sy, svx, svy, dt, planets) {
+  const {ax, ay} = computeGravity(sx, sy, planets);
+  svx += ax * dt;
+  svy += ay * dt;
+  sx += svx * dt;
+  sy += svy * dt;
+  return {x: sx, y: sy, vx: svx, vy: svy};
+}
+
+function checkCollision(x, y, planets) {
+  for (const p of planets) {
+    const dx = x - p.x;
+    const dy = y - p.y;
+    if (dx * dx + dy * dy < p.radius * p.radius) return 'planet';
+  }
+  if (x < -20 || x > W + 20 || y < -20 || y > H + 20) return 'bounds';
+  return null;
+}
+
+function checkTarget(x, y, target) {
+  const dx = x - target.x;
+  const dy = y - target.y;
+  return dx * dx + dy * dy < TARGET_RADIUS * TARGET_RADIUS;
+}
+
+function predictTrajectory(sx, sy, svx, svy, planets) {
+  const pts = [];
+  let px = sx, py = sy, pvx = svx, pvy = svy;
+  const dt = PREDICTION_TIME / PREDICTION_STEPS;
+  for (let i = 0; i < PREDICTION_STEPS; i++) {
+    const r = simulateStep(px, py, pvx, pvy, dt, planets);
+    px = r.x; py = r.y; pvx = r.vx; pvy = r.vy;
+    pts.push({x: px, y: py});
+    if (checkCollision(px, py, planets) || px < -20 || px > W + 20 || py < -20 || py > H + 20) break;
+  }
+  return pts;
+}
+
+function spawnParticles(x, y, color, count, speed) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const spd = Math.random() * speed + speed * 0.3;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * spd,
+      vy: Math.sin(angle) * spd,
+      life: 1,
+      decay: 0.012 + Math.random() * 0.025,
+      color,
+      size: (Math.floor(Math.random() * 2) + 1) * PX
+    });
+  }
+}
+
+function getCanvasCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY
+  };
+}
+
+function onPointerDown(e) {
+  e.preventDefault();
+  if (state !== 'aiming') return;
+  const pos = getCanvasCoords(e);
+  const dx = pos.x - ship.x;
+  const dy = pos.y - ship.y;
+  if (dx * dx + dy * dy < 80 * 80) {
+    dragging = true;
+    dragStart.x = ship.x;
+    dragStart.y = ship.y;
+    dragEnd.x = pos.x;
+    dragEnd.y = pos.y;
+  }
+}
+function onPointerMove(e) {
+  e.preventDefault();
+  if (!dragging) return;
+  const pos = getCanvasCoords(e);
+  dragEnd.x = pos.x;
+  dragEnd.y = pos.y;
+}
+function onPointerUp(e) {
+  e.preventDefault();
+  if (!dragging) return;
+  dragging = false;
+  const dx = dragStart.x - dragEnd.x;
+  const dy = dragStart.y - dragEnd.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 6) return;
+  const clampedDist = Math.min(dist, MAX_PULL);
+  const nx = dx / dist;
+  const ny = dy / dist;
+  const speed = (clampedDist / MAX_PULL) * 400 * LAUNCH_SPEED_MULT;
+  ship.vx = nx * speed;
+  ship.vy = ny * speed;
+  ship.angle = Math.atan2(ship.vy, ship.vx);
+  state = 'flying';
+  flightTime = 0;
+  trail = [{x: ship.x, y: ship.y}];
+  document.getElementById('hint').style.opacity = '0';
+}
+
+canvas.addEventListener('mousedown', onPointerDown);
+canvas.addEventListener('mousemove', onPointerMove);
+canvas.addEventListener('mouseup', onPointerUp);
+canvas.addEventListener('touchstart', onPointerDown, {passive: false});
+canvas.addEventListener('touchmove', onPointerMove, {passive: false});
+canvas.addEventListener('touchend', onPointerUp, {passive: false});
+canvas.addEventListener('touchcancel', onPointerUp, {passive: false});
+
+document.getElementById('btn-restart').addEventListener('click', restartLevel);
+document.getElementById('btn-menu').addEventListener('click', () => showLevelSelect());
+document.getElementById('btn-next').addEventListener('click', () => {
+  if (state !== 'won') return;
+  if (currentLevel < levels.length - 1) {
+    initLevel(currentLevel + 1);
+    hideMessage();
+  } else {
+    showCompleteScreen();
+  }
+});
+document.getElementById('start-btn').addEventListener('click', () => {
+  hideStartScreen();
+  // Resume at first uncompleted level (or level 1 if none completed)
+  let target = 0;
+  for (let i = 0; i < levels.length; i++) {
+    if (!completed.has(i)) { target = i; break; }
+    if (i === levels.length - 1) target = 0;
+  }
+  initLevel(target);
+});
+document.getElementById('stage-select-btn').addEventListener('click', () => {
+  hideStartScreen();
+  showLevelSelect();
+});
+document.getElementById('start-btn-replay').addEventListener('click', () => {
+  completed.clear();
+  saveProgress();
+  hideCompleteScreen();
+  initLevel(0);
+});
+document.getElementById('cs-menu-btn').addEventListener('click', () => {
+  hideCompleteScreen();
+  showLevelSelect();
+});
+document.getElementById('ls-close-btn').addEventListener('click', () => {
+  hideLevelSelect();
+});
+document.getElementById('ls-reset-btn').addEventListener('click', () => {
+  if (confirm('Reset all progress?')) {
+    completed.clear();
+    saveProgress();
+    hideLevelSelect();
+    initLevel(0);
+  }
+});
+
+function showStartScreen() {
+  document.getElementById('start-screen').classList.remove('hidden');
+}
+function hideStartScreen() {
+  document.getElementById('start-screen').classList.add('hidden');
+}
+function showCompleteScreen() {
+  document.getElementById('complete-screen').classList.add('show');
+  spawnParticles(W/2, H/2, '#ffd633', 80, 200);
+  spawnParticles(W/2, H/2, '#ffffff', 50, 150);
+}
+function hideCompleteScreen() {
+  document.getElementById('complete-screen').classList.remove('show');
+}
+function showLevelSelect() {
+  hideMessage();
+  const el = document.getElementById('level-select');
+  el.classList.add('show');
+  const grid = document.getElementById('level-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < levels.length; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'lvl-cell';
+    const unlocked = i === 0 || completed.has(i - 1) || completed.has(i);
+    const isCurrent = i === currentLevel;
+    if (!unlocked) btn.classList.add('locked');
+    if (completed.has(i)) btn.classList.add('completed');
+    if (isCurrent) btn.classList.add('current');
+    const num = String(i + 1).padStart(2, '0');
+    const lock = unlocked ? '' : '<span class="check" style="color:#404858">🔒</span>';
+    const check = completed.has(i) ? '<span class="check">✓</span>' : lock;
+    btn.innerHTML = `<span class="num">${num}</span>${check}<span class="name">${levels[i].name}</span>`;
+    if (unlocked) {
+      btn.addEventListener('click', () => {
+        hideLevelSelect();
+        initLevel(i);
+      });
+    }
+    grid.appendChild(btn);
+  }
+}
+function hideLevelSelect() {
+  document.getElementById('level-select').classList.remove('show');
+}
+
+function drawStars() {
+  if (STAR_FIELD) ctx.drawImage(STAR_FIELD, 0, 0);
+}
+
+function drawPlanet(p) {
+  if (!p.sprite) return;
+  const w = p.sprite.width;
+  const h = p.sprite.height;
+  ctx.drawImage(p.sprite, Math.round(p.x - w/2), Math.round(p.y - h/2));
+}
+
+function drawTarget(t) {
+  portalPulse += 0.06;
+  const cx = t.x, cy = t.y;
+  if (PORTAL_STATIC) {
+    ctx.drawImage(PORTAL_STATIC, Math.round(cx - PORTAL_STATIC.width/2), Math.round(cy - PORTAL_STATIC.height/2));
+  }
+  // spinning blades — only dynamic part
+  const snap = v => Math.round(v / PX) * PX;
+  const cosA = Math.cos(portalPulse * 2.5);
+  const sinA = Math.sin(portalPulse * 2.5);
+  ctx.fillStyle = '#ff5500';
+  for (let i = 0; i < 4; i++) {
+    // rotated 90° increments via swap/sign
+    const c0 = i === 0 ? cosA : i === 1 ? -sinA : i === 2 ? -cosA : sinA;
+    const s0 = i === 0 ? sinA : i === 1 ? cosA : i === 2 ? -sinA : -cosA;
+    for (let k = 0; k < 4; k++) {
+      const r = 4 + k * 2;
+      ctx.fillRect(snap(cx + c0 * r), snap(cy + s0 * r), PX, PX);
+    }
+  }
+  ctx.fillStyle = '#ffd633';
+  for (let i = 0; i < 4; i++) {
+    const c0 = i === 0 ? cosA : i === 1 ? -sinA : i === 2 ? -cosA : sinA;
+    const s0 = i === 0 ? sinA : i === 1 ? cosA : i === 2 ? -sinA : -cosA;
+    for (let k = 4; k < 6; k++) {
+      const r = 4 + k * 2;
+      ctx.fillRect(snap(cx + c0 * r), snap(cy + s0 * r), PX, PX);
+    }
+  }
+  // bright core
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(snap(cx) - PX, snap(cy) - PX, PX * 2, PX * 2);
+}
+
+function drawShip(x, y, angle) {
+  if (!SHIP_SPRITE) return;
+  const w = SHIP_SPRITE.width;
+  const h = SHIP_SPRITE.height;
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  // Rotate sprite. The sprite is oriented with nose pointing up (-y). Game angle 0 = pointing right (+x).
+  ctx.rotate(angle + Math.PI / 2);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(SHIP_SPRITE, -w/2, -h/2);
+  // engine flame flicker behind ship
+  if (state === 'flying') {
+    const flicker = Math.random();
+    if (flicker > 0.3) {
+      ctx.fillStyle = '#ffd633';
+      ctx.fillRect(-3, h/2 - 3, 6, 3);
+    }
+    if (flicker > 0.6) {
+      ctx.fillStyle = '#ff5500';
+      ctx.fillRect(-6, h/2, 12, 3);
+      ctx.fillStyle = '#ffd633';
+      ctx.fillRect(-3, h/2, 6, 3);
+    }
+  }
+  ctx.restore();
+}
+
+function drawTrail() {
+  // Batch by color/alpha — quantize to TRAIL_COL_* presets to avoid fillStyle string parsing per dot
+  const len = trail.length;
+  if (len < 2) return;
+  let lastStyle = '';
+  for (let i = 0; i < len; i += 2) {
+    const t = i / len;
+    const alphaIdx = Math.min(10, ((t * 0.85 * 10) | 0));
+    const col = t < 0.5 ? TRAIL_COL_BLUE[alphaIdx] : TRAIL_COL_WHITE[alphaIdx];
+    if (col !== lastStyle) { ctx.fillStyle = col; lastStyle = col; }
+    const x = (trail[i].x / PX | 0) * PX;
+    const y = (trail[i].y / PX | 0) * PX;
+    ctx.fillRect(x, y, PX, PX);
+  }
+}
+
+function drawPrediction(pts) {
+  if (pts.length === 0) return;
+  // Dashed line — bright cyan, "ON" for 3 points, "OFF" for 3 points
+  // Tiny black outline pass for contrast against starfield
+  ctx.fillStyle = '#000';
+  for (let i = 0; i < pts.length; i++) {
+    if ((i / 3 | 0) % 2 !== 0) continue;
+    const x = (pts[i].x / PX | 0) * PX;
+    const y = (pts[i].y / PX | 0) * PX;
+    ctx.fillRect(x - PX, y - PX, PX * 3, PX * 3);
+  }
+  ctx.fillStyle = '#5cd0ff';
+  for (let i = 0; i < pts.length; i++) {
+    if ((i / 3 | 0) % 2 !== 0) continue;
+    const x = (pts[i].x / PX | 0) * PX;
+    const y = (pts[i].y / PX | 0) * PX;
+    ctx.fillRect(x, y, PX, PX);
+  }
+  // Mark the endpoint when trajectory terminates early
+  if (pts.length < PREDICTION_STEPS) {
+    const last = pts[pts.length - 1];
+    const x = (last.x / PX | 0) * PX;
+    const y = (last.y / PX | 0) * PX;
+    const inBounds = last.x > 0 && last.x < W && last.y > 0 && last.y < H;
+    if (inBounds) {
+      // CRASH marker — red pixelated X with black outline
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x - PX * 3, y - PX * 3, PX * 7, PX * 7);
+      ctx.fillStyle = '#ff2020';
+      ctx.fillRect(x - PX * 2, y - PX * 2, PX, PX);
+      ctx.fillRect(x + PX * 2, y - PX * 2, PX, PX);
+      ctx.fillRect(x - PX, y - PX, PX, PX);
+      ctx.fillRect(x + PX, y - PX, PX, PX);
+      ctx.fillRect(x, y, PX, PX);
+      ctx.fillRect(x - PX, y + PX, PX, PX);
+      ctx.fillRect(x + PX, y + PX, PX, PX);
+      ctx.fillRect(x - PX * 2, y + PX * 2, PX, PX);
+      ctx.fillRect(x + PX * 2, y + PX * 2, PX, PX);
+    }
+  }
+}
+
+function drawElastic(sx, sy, ex, ey) {
+  // "Sling band" — dashed line from ship to finger, marker at finger
+  const dx = ex - sx;
+  const dy = ey - sy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 4) return;
+  const steps = (dist / PX | 0);
+  const ux = dx / steps;
+  const uy = dy / steps;
+  ctx.fillStyle = '#6080a8';
+  for (let i = 1; i < steps; i++) {
+    if ((i / 2 | 0) % 2 !== 0) continue;
+    const x = (sx + ux * i) / PX | 0;
+    const y = (sy + uy * i) / PX | 0;
+    ctx.fillRect(x * PX, y * PX, PX, PX);
+  }
+  // finger marker (small circle of pixels)
+  const fx = (ex / PX | 0) * PX;
+  const fy = (ey / PX | 0) * PX;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(fx - PX * 2, fy - PX, PX * 5, PX * 3);
+  ctx.fillRect(fx - PX, fy - PX * 2, PX * 3, PX * 5);
+  ctx.fillStyle = '#a8b8d0';
+  ctx.fillRect(fx - PX, fy, PX * 3, PX);
+  ctx.fillRect(fx, fy - PX, PX, PX * 3);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(fx, fy, PX, PX);
+}
+
+function drawAimArrow(sx, sy, ex, ey) {
+  const dx = sx - ex;
+  const dy = sy - ey;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 5) return;
+  const clampedDist = Math.min(dist, MAX_PULL);
+  const nx = dx / dist;
+  const ny = dy / dist;
+  const len = clampedDist * 0.75;
+  // pixelated arrow shaft
+  const steps = Math.floor(len / PX);
+  for (let i = 1; i <= steps; i++) {
+    const x = Math.round((sx + nx * i * PX) / PX) * PX;
+    const y = Math.round((sy + ny * i * PX) / PX) * PX;
+    const t = i / steps;
+    const color = t < 0.4 ? '#5cd0ff' : t < 0.75 ? '#ffd633' : '#ff5500';
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, PX, PX);
+  }
+  // arrowhead
+  const tipX = sx + nx * len;
+  const tipY = sy + ny * len;
+  const perpX = -ny;
+  const perpY = nx;
+  ctx.fillStyle = '#ff5500';
+  for (let i = 0; i < 5; i++) {
+    const back = -i;
+    for (let j = -i; j <= i; j++) {
+      const x = Math.round((tipX + nx * back * PX + perpX * j * PX) / PX) * PX;
+      const y = Math.round((tipY + ny * back * PX + perpY * j * PX) / PX) * PX;
+      ctx.fillRect(x, y, PX, PX);
+    }
+  }
+  // power label
+  const pct = Math.round((clampedDist / MAX_PULL) * 100);
+  ctx.fillStyle = '#000';
+  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  const lblX = sx + nx * (len + 18);
+  const lblY = sy + ny * (len + 18);
+  ctx.fillText(`${pct}%`, lblX + 1, lblY + 1);
+  ctx.fillStyle = pct >= 80 ? '#ff5500' : pct >= 40 ? '#ffd633' : '#5cd0ff';
+  ctx.fillText(`${pct}%`, lblX, lblY);
+  ctx.textAlign = 'left';
+}
+
+function drawParticles() {
+  if (particles.length === 0) return;
+  // Group by color so we set fillStyle once per color group
+  const byColor = {};
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    (byColor[p.color] || (byColor[p.color] = [])).push(p);
+  }
+  for (const color in byColor) {
+    ctx.fillStyle = color;
+    const group = byColor[color];
+    for (let i = 0; i < group.length; i++) {
+      const p = group[i];
+      const life = p.life;
+      if (life <= 0) continue;
+      ctx.globalAlpha = life;
+      const sz = (p.size * life) | 0;
+      ctx.fillRect((p.x / PX | 0) * PX, (p.y / PX | 0) * PX, sz < PX ? PX : sz, sz < PX ? PX : sz);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function lose(reason) {
+  state = 'lost';
+  if (reason === 'planet') {
+    spawnParticles(ship.x, ship.y, '#ff2020', 30, 120);
+    spawnParticles(ship.x, ship.y, '#ffd633', 20, 90);
+    shakeTime = 0.35;
+    shakeIntensity = 10;
+    showMessage('CRASHED', '#ff4040');
+  } else if (reason === 'bounds') {
+    spawnParticles(ship.x, ship.y, '#ff8800', 15, 80);
+    showMessage('LOST', '#ff8800');
+  } else {
+    showMessage('TIME OUT', '#ffaa00');
+  }
+  setTimeout(restartLevel, 1500);
+}
+
+function win() {
+  state = 'won';
+  completed.add(currentLevel);
+  saveProgress();
+  spawnParticles(ship.x, ship.y, '#ffd633', 50, 150);
+  spawnParticles(ship.x, ship.y, '#ffffff', 30, 100);
+  spawnParticles(ship.x, ship.y, '#ff5500', 25, 120);
+  if (currentLevel >= levels.length - 1) {
+    showMessage('STAGE CLEAR!', '#ffd633');
+    setTimeout(showCompleteScreen, 1700);
+  } else {
+    showMessage('STAGE CLEAR!', '#ffd633');
+  }
+  winAnimTime = 0;
+  updateUI();
+}
+
+let lastTime = 0;
+let accumulator = 0;
+let globalTime = 0;
+
+function gameLoop(timestamp) {
+  requestAnimationFrame(gameLoop);
+  if (!lastTime) { lastTime = timestamp; return; }
+  const frameDt = Math.min((timestamp - lastTime) / 1000, 0.1);
+  lastTime = timestamp;
+  accumulator += frameDt;
+  globalTime += frameDt;
+
+  const lv = levels[currentLevel];
+
+  while (accumulator >= FIXED_DT) {
+    accumulator -= FIXED_DT;
+    if (state === 'flying') {
+      flightTime += FIXED_DT;
+      const r = simulateStep(ship.x, ship.y, ship.vx, ship.vy, FIXED_DT, lv.planets);
+      ship.x = r.x; ship.y = r.y; ship.vx = r.vx; ship.vy = r.vy;
+      ship.angle = Math.atan2(ship.vy, ship.vx);
+      trail.push({x: ship.x, y: ship.y});
+      if (trail.length > TRAIL_MAX) trail.shift();
+      const col = checkCollision(ship.x, ship.y, lv.planets);
+      if (col) { lose(col); break; }
+      if (checkTarget(ship.x, ship.y, lv.target)) { win(); break; }
+      if (flightTime > MAX_FLIGHT_TIME) { lose('timeout'); break; }
+    }
+    updateParticles(FIXED_DT);
+    if (shakeTime > 0) shakeTime -= FIXED_DT;
+  }
+
+  if (state === 'won') winAnimTime += frameDt;
+
+  render(lv);
+}
+
+function render(lv) {
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (shakeTime > 0) {
+    const sx = Math.round((Math.random() - 0.5) * shakeIntensity) * PX;
+    const sy = Math.round((Math.random() - 0.5) * shakeIntensity) * PX;
+    ctx.translate(sx, sy);
+  }
+
+  ctx.fillStyle = '#0b1530';
+  ctx.fillRect(0, 0, W, H);
+  drawStars();
+
+  for (let i = 0; i < lv.planets.length; i++) {
+    drawPlanet(lv.planets[i]);
+  }
+
+  drawTarget(lv.target);
+  drawTrail();
+  drawParticles();
+
+  if (state === 'aiming') {
+    const shipAngle = dragging ? Math.atan2(dragStart.y - dragEnd.y, dragStart.x - dragEnd.x) : -Math.PI / 2;
+    if (dragging) {
+      // Elastic band from ship to finger — always visible, even on tiny drags
+      drawElastic(ship.x, ship.y, dragEnd.x, dragEnd.y);
+    }
+    drawShip(ship.x, ship.y, shipAngle);
+    if (dragging) {
+      const dx = dragStart.x - dragEnd.x;
+      const dy = dragStart.y - dragEnd.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 6) {
+        const clampedDist = Math.min(dist, MAX_PULL);
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const speed = (clampedDist / MAX_PULL) * 400 * LAUNCH_SPEED_MULT;
+        const pts = predictTrajectory(ship.x, ship.y, nx * speed, ny * speed, lv.planets);
+        drawPrediction(pts);
+        drawAimArrow(ship.x, ship.y, dragEnd.x, dragEnd.y);
+      }
+    }
+  } else if (state === 'flying') {
+    drawShip(ship.x, ship.y, ship.angle);
+    const timeLeft = Math.max(0, MAX_FLIGHT_TIME - flightTime);
+    ctx.fillStyle = '#000';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${timeLeft.toFixed(1)}S`, W - 12, 60);
+    ctx.fillStyle = timeLeft < 3 ? `rgba(255,80,80,${0.6 + Math.sin(flightTime * 8) * 0.4})` : '#5cd0ff';
+    ctx.fillText(`${timeLeft.toFixed(1)}S`, W - 13, 59);
+    ctx.textAlign = 'left';
+  } else if (state === 'won') {
+    const s = Math.max(0, 1 - winAnimTime * 1.5);
+    if (s > 0) drawShip(ship.x, ship.y, ship.angle + winAnimTime * 8);
+  }
+
+  ctx.restore();
+}
+
+SHIP_SPRITE = createShipSprite();
+PORTAL_STATIC = createPortalStatic();
+initStars();
+initLevel(0);
+showStartScreen();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
